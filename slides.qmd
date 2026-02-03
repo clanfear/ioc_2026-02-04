@@ -75,15 +75,15 @@ gg_color_hue <- function(n) {
 load("./data/cdc_mortality.RData")
 
 cdc_mortality |>
-  filter(year >= 1987) |>
+  filter(year >= 1980) |>
   select(year, rate, type) |>
   ggplot(aes(x = year, y = rate, group = type, color = type, linetype = type)) + 
   geom_line(linewidth = 0.75) +
   scale_linetype_manual(values = c("All" = "dashed", "Firearm" = "solid")) +
   geom_hline(yintercept = 0, color = "white", linewidth = 0.5) +
   geom_text(data = ~ . |> 
-              filter((type %in% c("All", "Firearm") & year == 1988)) |> 
-              mutate(rate = ifelse(type == "Firearm", rate - 1, rate  + 1)), 
+              filter((type %in% c("All", "Firearm") & year == 1982)) |> 
+              mutate(rate = ifelse(type == "Firearm", rate - 1.5, rate  + 1)), 
             aes(label = type), 
             family = plot_font,
             size = 6) +
@@ -104,14 +104,15 @@ Peaked in 1990s and 2020-2021 and increasingly involves guns
 ## Homicide in Chicago {background-image="img/stephan-cassara-KnAIsBuitGg-unsplash.jpg" background-opacity="0.2"}
 
 ```{r homicide-in-chicago}
-load("./data/chicago_rates_year.RData")
-chicago_rates_year |>
-  filter(year >= 1985) |>
+load("./data/chicago_homicide_rates.RData")
+
+chicago_homicide_rates |>
+  filter(year >= 1980) |>
   ggplot(aes(x = year, y = rate, group = type, color = type, linetype = type)) + 
   geom_line(linewidth = 0.75) +
   scale_linetype_manual(values = c("All" = "dashed", "Firearm" = "solid")) +
   geom_hline(yintercept = 0, color = "white", linewidth = 0.5) +
-  geom_text(data = ~ . |> filter(year == 1987) |> mutate(rate = ifelse(type == "All", rate + 4, rate -3)), aes(label = type), family = plot_font, size = 6) +
+  geom_text(data = ~ . |> filter(year == 1983) |> mutate(rate = ifelse(type == "All", rate + 4, rate -3)), aes(label = type), family = plot_font, size = 6) +
   labs(x = NULL, y = "Rate per 100,000", caption = "Source: Chicago PD") +
   theme_minimal(base_size = 24) +
   theme(panel.grid = element_blank(),
@@ -717,16 +718,18 @@ exp_preds  |>
 
 
 ```{r handgun-homicide}
-load("./data/shr_props_year.RData")
-
+# load("./data/shr_props_year.RData")
+load("./data/shr_props_year_std.RData")
 col_vec <- setNames(c("#7CAE00", "#C77CFF"), c("Adolescence", "Adulthood"))
-shr_props_year <- shr_props_year |>
+shr_props_year <- shr_props_year_std |>
   filter(between(age, 10, 60)) |>
   mutate(stage = case_when(
     between(age, 10, 20) ~ "Adolescence",
     age >= 21 ~ "Adulthood",
     TRUE ~ ""
-  ))
+  )) |>
+  arrange(stage, year, age) |>
+  mutate(cum_pr = cumsum(pr), .by = c(stage, year))
 
 shr_sums <- shr_props_year |> 
   summarize(pr = sum(pr),
@@ -756,7 +759,7 @@ ggplot(aes(x = age, y = pr, fill = stage)) +
   scale_y_continuous(breaks = NULL) +
   facet_wrap(~year, nrow = 1) +
   theme_minimal(base_size = 24) +
-  labs(x = "Age of handgun homicide offenders", y = NULL, caption = "Source: FBI UCR SHR") +
+  labs(x = "Age of handgun homicide offenders", y = NULL, caption = "1995 standardized to 2021 US population age distribution. Source: FBI UCR SHR") +
   theme(panel.grid = element_blank(),
         strip.text = element_text(family = plot_font,  color = "white", size = rel(1.2)),
         axis.ticks.x = element_line(color = "white"),
@@ -769,86 +772,6 @@ ggplot(aes(x = age, y = pr, fill = stage)) +
         legend.position = "none")
 ```
 
-
-## [Not attributable to age composition]{.r-fit-text}{background-image="img/pedro-lastra-5Bv3EcijAl4-unsplash.jpg" background-opacity="0.2"}
-
-```{r}
-load("./data/derived/pop_comp_1995.RData")
-load("./data/derived/pop_comp_2021.RData")
-
-std_offender_rate_plot <- shr_props_year |>
-  filter(year %in% c(1995, 2021)) |>
-  select(year, age, homicides = n) |>
-  left_join(pop_comp_1995 |> 
-              transmute(age, year = 1995, all) |>
-              bind_rows(pop_comp_2021|> 
-                          transmute(age, year = 2021, all))) |>
-  arrange(age, year) |>
-  mutate(ashr = homicides / all,
-         year = as.character(year)) |>
-  left_join(pop_comp_2021|> 
-              transmute(age, all_2021 = all)) |>
-  mutate(
-    raw_hom = homicides/all,
-    standardized_hom = (ashr*all_2021)/sum(ashr*all_2021), .by = year) |>
-  ggplot(aes(x = age, y = standardized_hom, color = year, group = year)) + 
-  geom_line() + 
-  scale_x_continuous(limits = c(10,60)) +
-  labs(title = 'Offender age composition', 
-       subtitle = "Standardized to 2021", 
-       x = "Age", 
-       y = NULL, color = NULL) +
-  theme_minimal(base_size = 22) +
-  theme(panel.grid = element_blank(),
-        strip.text = element_text(family = plot_font,  color = "white", size = rel(1.2)),
-        axis.line.x = element_line(color = "white", linewidth = 0.5),
-        axis.ticks.x = element_line(color = "white"),
-        axis.text = element_text(color = "white"),
-        axis.text.y = element_blank(),
-        axis.title.x = element_text(color = "white", size = rel(0.8)),
-        text = element_text(family = plot_font,  color = "white"),
-        legend.background = element_rect(fill = "transparent", color = NA),
-        panel.background = element_rect(fill = "transparent",colour = NA),
-        plot.background = element_rect(fill = "transparent",colour = NA),
-        plot.margin = margin(12,0,0,12, "pt"),
-        legend.position = "none")
-
-pop_comp_plot <- pop_comp_1995 |> 
-  transmute(age, year = 1995, all) |>
-  bind_rows(pop_comp_2021|> 
-              transmute(age, year = 2021, all)) |>
-  mutate(year = as.character(year),
-         pop_pr = all/sum(all), .by = year) |>
-  ggplot(aes(x = age, y = pop_pr, color = year, group = year)) + 
-  scale_x_continuous(limits = c(10,60)) +
-  geom_line()  +
-  geom_text(data = ~ .x |> 
-              filter(age == 55) |> 
-              mutate(pop_pr = ifelse(year == 1995, pop_pr*0.75, pop_pr*1.20)), 
-            aes(label = year, color = year, x = age, y = pop_pr), size = 6) +
-  labs(title = 'Population age composition',  x = "Age", y = NULL, color = NULL) +
-  theme_minimal(base_size = 22) +
-  theme(panel.grid = element_blank(),
-        strip.text = element_text(family = plot_font,  color = "white", size = rel(1.2)),
-        axis.ticks.x = element_line(color = "white"),
-        axis.line.x = element_line(color = "white", linewidth = 0.5),
-        axis.text = element_text(color = "white"),
-        axis.text.y = element_blank(),
-        axis.title.x = element_text(color = "white", size = rel(0.8)),
-        text = element_text(family = plot_font,  color = "white"),
-        panel.background = element_rect(fill = "transparent",colour = NA),
-        plot.background = element_rect(fill = "transparent",colour = NA),
-        plot.margin = margin(12,12,0,0, "pt"),
-        legend.position = "none")
-
-pop_comp_plot + std_offender_rate_plot & 
-  theme(plot.background = element_rect(fill = "transparent",colour = NA),
-        legend.background = element_rect(fill = 'transparent'),
-        panel.background = element_rect(fill = "transparent",colour = NA))
-```
-
-
-Also: Homicide nadir in 2000 but age-shift occurred in 2010
 
 
 ## [Two similar periods of high gun violence, except...]{.r-fit-text}{background-image="img/pedro-lastra-5Bv3EcijAl4-unsplash.jpg" background-opacity="0.2"}
